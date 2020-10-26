@@ -6,4 +6,4 @@
 
 **(DONE)** [Problem 3: Folder Compare](https://github.com/galihrivanto/recruitment/tree/master/compare)
 
-**(DONE)** [Problem 4: Concurrency](https://github.com/galihrivanto/recruitment/tree/master/concurrency)
+[Problem 4: Concurrency](https://github.com/galihrivanto/recruitment/tree/master/concurrency)
