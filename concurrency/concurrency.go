@@ -4,21 +4,24 @@ import (
 	"bytes"
 	"encoding/csv"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
+	"sync"
 )
 
 type queueMuseum struct {
 	location string
-	museum   jsonInfoMuseum
+	museums  []jsonInfoMuseum
 }
 
 type jsonDataMuseum struct {
 	DataMuseum []jsonInfoMuseum `json:"data"`
 }
+
 type jsonInfoMuseum struct {
 	ID        string `json:"museum_id"`
 	Kode      string `json:"kode_pengelolaan"`
@@ -43,8 +46,13 @@ type jsonInfoMuseum struct {
 }
 
 func main() {
-	res, err := http.Get("http://jendela.data.kemdikbud.go.id/api/index.php/CcariMuseum/searchGET?nama=museum")
 
+	argBuff := flag.Int("concurrent_limit", 2, "an Int")
+	argLoc := flag.String("output", "./museum", "a String directory")
+	flag.Parse()
+
+	fmt.Println("BEGIN")
+	res, err := http.Get("http://jendela.data.kemdikbud.go.id/api/index.php/CcariMuseum/searchGET?nama=museum")
 	if err != nil {
 		fmt.Println("http.Get : ", err)
 		log.Fatal(err)
@@ -55,25 +63,79 @@ func main() {
 	data = bytes.TrimPrefix(data, []byte("\xef\xbb\xbf"))
 
 	var jsonData jsonDataMuseum
+
 	err = json.Unmarshal(data, &jsonData)
 	if err != nil {
 		fmt.Println("unmarshal : ", err)
 	}
 
-	csvFile, err := os.Create("./data.csv")
-	if err != nil {
-		fmt.Println("os.Create : ", err)
+	queues := filterData(jsonData)
+
+	if _, err := os.Stat(*argLoc); os.IsNotExist(err) {
+		os.Mkdir(*argLoc, 0700)
 	}
-	defer csvFile.Close()
 
-	writer := csv.NewWriter(csvFile)
-	fmt.Printf("%T\n", writer)
+	c := make(chan queueMuseum, *argBuff)
+	var wg sync.WaitGroup
 
-	titleCSV(writer)
-	for _, info := range jsonData.DataMuseum {
+	go queueChannel(queues, c)
+
+	for queue := range c {
+		csvFile, err := os.Create(string(*argLoc + "/" + queue.location + ".csv"))
+		if err != nil {
+			fmt.Println("os.Create : ", err)
+		}
+		defer csvFile.Close()
+
+		writer := csv.NewWriter(csvFile)
+
+		titleCSV(writer)
+
+		wg.Add(1)
+		go writing(queue, writer, &wg)
+		wg.Wait()
+	}
+	fmt.Println("DONE")
+}
+
+func filterData(data jsonDataMuseum) (queues []queueMuseum) {
+	make := true
+	for _, info := range data.DataMuseum {
+		for i, queue := range queues {
+			if info.Kabupaten == queue.location {
+				queues[i].museums = append(queue.museums, info)
+				make = false
+				break
+			} else {
+				make = true
+				continue
+			}
+		}
+		if make == true {
+			var temp queueMuseum
+			temp.location = info.Kabupaten
+			temp.museums = append(temp.museums, info)
+
+			queues = append(queues, temp)
+		}
+	}
+	return queues
+}
+
+func queueChannel(queues []queueMuseum, c chan queueMuseum) {
+	for _, queue := range queues {
+		c <- queue
+	}
+	close(c)
+}
+
+func writing(queue queueMuseum, writer *csv.Writer, wg *sync.WaitGroup) {
+	defer wg.Done()
+
+	for _, info := range queue.museums {
+		// fmt.Println(info.Kabupaten, i)
 		buildCSV(info, writer)
 	}
-
 	writer.Flush()
 }
 
