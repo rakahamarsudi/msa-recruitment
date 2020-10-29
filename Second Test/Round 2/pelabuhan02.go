@@ -326,16 +326,7 @@ func main() {
 			antrianMobil.ManageMoving(car2, 2, &wg)
 		}
 		wg.Wait()
-		// select {
-		// case car := <-staff1:
-		// 	{
-		// 		antrianMobil.ManageMoving(car, 1)
-		// 	}
-		// case car := <-staff2:
-		// 	{
-		// 		antrianMobil.ManageMoving(car, 2)
-		// 	}
-		// }
+
 		ferryS.CekMuatan()
 		ferryL.CekMuatan()
 		ferryE.CekMuatan()
